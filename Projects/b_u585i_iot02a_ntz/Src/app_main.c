@@ -39,6 +39,13 @@
 #include "hw_defs.h"
 #include <string.h>
 
+#include "core_mqtt.h"
+#include "core_mqtt_agent.h"
+#include "sys_evt.h"
+
+/* JSON library includes. */
+#include "core_json.h"
+
 #include "lfs.h"
 #include "fs/lfs_port.h"
 #include "stm32u5xx_ll_rng.h"
@@ -157,19 +164,59 @@ static void vRelocateVectorTable( void )
 }
 
 
-static void vHeartbeatTask( void * pvParameters )
+static bool prvSubscribeToTopic(char * pcTopicFilter, MQTTAgentCommandCallback_t pCallbackFunction )
 {
-    ( void ) pvParameters;
+	vSleepUntilMQTTAgentReady();
+	MQTTStatus_t xStatus = MqttAgent_SubscribeSync( xGetMqttAgentHandle(),
+	                                           pcTopicFilter,
+	                                           MQTTQoS0,
+	                                           pCallbackFunction,
+	                                           NULL );
 
-    HAL_GPIO_WritePin( LED_GREEN_GPIO_Port, LED_GREEN_Pin, GPIO_PIN_RESET );
-    HAL_GPIO_WritePin( LED_RED_GPIO_Port, LED_RED_Pin, GPIO_PIN_SET );
-
-    while( 1 )
-    {
-        vTaskDelay( pdMS_TO_TICKS( 1000 ) );
-        HAL_GPIO_TogglePin( LED_GREEN_GPIO_Port, LED_GREEN_Pin );
-    }
+	if( xStatus == MQTTSuccess )
+	{
+		LogInfo("Subscribing to %s!", pcTopicFilter);
+		return true;
+	}
+	else
+	{
+		LogInfo("Subscribing to %s failed", pcTopicFilter);
+		return false;
+	}
 }
+
+
+static void prvSampleCallback(void * pvCtx, MQTTPublishInfo_t * pxPublishInfo)
+{
+
+	LogDebug( "prvSampleCallback json payload:%.*s.",
+	              pxPublishInfo->payloadLength,
+	              ( const char * ) pxPublishInfo->pPayload );
+
+	char * pcOutValue = NULL;
+	uint32_t ulOutValueLength = 0UL;
+	JSONStatus_t result = JSONSuccess;
+	result = JSON_Search( ( char * ) pxPublishInfo->pPayload,
+	                              pxPublishInfo->payloadLength,
+	                              "target_temperature",
+	                              sizeof( "target_temperature" ) - 1,
+	                              &pcOutValue,
+	                              ( size_t * ) &ulOutValueLength );
+	uint32_t target_temperature = ( uint32_t ) strtoul( pcOutValue, NULL, 10 );
+	LogInfo( "Target Temperature = %u", target_temperature);
+}
+
+
+//--------------------------
+//TODO: Implement a callback function that subscribes to the LED blinking rate
+
+
+
+
+//--------------------
+//TODO: vHeartbeatTask
+
+
 
 extern void net_main( void * pvParameters );
 extern void vMQTTAgentTask( void * );
@@ -214,10 +261,12 @@ void vInitTask( void * pvArgs )
         LogError( "Failed to mount filesystem." );
     }
 
+
     ( void ) xEventGroupSetBits( xSystemEvents, EVT_MASK_FS_READY );
 
-    xResult = xTaskCreate( vHeartbeatTask, "Heartbeat", 128, NULL, tskIDLE_PRIORITY, NULL );
-    configASSERT( xResult == pdTRUE );
+
+    LogInfo( "---- Welcome to Security of Cyber-Physical Systems ---- ");
+
 
     xResult = xTaskCreate( &net_main, "MxNet", 1024, NULL, 23, NULL );
     configASSERT( xResult == pdTRUE );
@@ -225,26 +274,26 @@ void vInitTask( void * pvArgs )
     xResult = xTaskCreate( vMQTTAgentTask, "MQTTAgent", 2048, NULL, 10, NULL );
     configASSERT( xResult == pdTRUE );
 
-    xResult = xTaskCreate( vOTAUpdateTask, "OTAUpdate", 4096, NULL, tskIDLE_PRIORITY + 1, NULL );
-    configASSERT( xResult == pdTRUE );
 
     xResult = xTaskCreate( vEnvironmentSensorPublishTask, "EnvSense", 1024, NULL, 6, NULL );
     configASSERT( xResult == pdTRUE );
 
-    xResult = xTaskCreate( vMotionSensorsPublish, "MotionS", 2048, NULL, 5, NULL );
-    configASSERT( xResult == pdTRUE );
 
-    xResult = xTaskCreate( vShadowDeviceTask, "ShadowDevice", 1024, NULL, 5, NULL );
-    configASSERT( xResult == pdTRUE );
+    /* TODO: Create Heartbeat task here */
 
-    xResult = xTaskCreate( vDefenderAgentTask, "AWSDefender", 2048, NULL, 5, NULL );
-    configASSERT( xResult == pdTRUE );
+
+	prvSubscribeToTopic("/ncsu/team_0/set_temp", prvSampleCallback);
+
+
+	/* TODO: Subscribe to '/ncsu/team_x/led_rate' topic*/
+
 
     while( 1 )
     {
         vTaskSuspend( NULL );
     }
 }
+
 
 static uint32_t ulCsrFlags = 0;
 

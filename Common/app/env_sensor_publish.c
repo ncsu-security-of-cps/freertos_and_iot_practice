@@ -57,7 +57,7 @@
 
 #define MQTT_PUBLISH_MAX_LEN                 ( 512 )
 #define MQTT_PUBLISH_TIME_BETWEEN_MS         ( 1000 )
-#define MQTT_PUBLISH_TOPIC                   "env_sensor_data"
+//#define MQTT_PUBLISH_TOPIC                   "env_sensor_data"
 #define MQTT_PUBLICH_TOPIC_STR_LEN           ( 256 )
 #define MQTT_PUBLISH_BLOCK_TIME_MS           ( 1000 )
 #define MQTT_PUBLISH_NOTIFICATION_WAIT_MS    ( 1000 )
@@ -80,7 +80,7 @@ struct MQTTAgentCommandContext
 typedef struct
 {
     float_t fTemperature0;
-    float_t fTemperature1;
+//    float_t fTemperature1;
     float_t fHumidity;
     float_t fBarometricPressure;
 } EnvironmentalSensorData_t;
@@ -230,7 +230,6 @@ static BaseType_t xUpdateSensorData( EnvironmentalSensorData_t * pxData )
 
     lBspError = BSP_ENV_SENSOR_GetValue( 0, ENV_TEMPERATURE, &pxData->fTemperature0 );
     lBspError |= BSP_ENV_SENSOR_GetValue( 0, ENV_HUMIDITY, &pxData->fHumidity );
-    lBspError |= BSP_ENV_SENSOR_GetValue( 1, ENV_TEMPERATURE, &pxData->fTemperature1 );
     lBspError |= BSP_ENV_SENSOR_GetValue( 1, ENV_PRESSURE, &pxData->fBarometricPressure );
 
     return( lBspError == BSP_ERROR_NONE ? pdTRUE : pdFALSE );
@@ -239,6 +238,11 @@ static BaseType_t xUpdateSensorData( EnvironmentalSensorData_t * pxData )
 /*-----------------------------------------------------------*/
 
 extern UBaseType_t uxRand( void );
+
+
+
+
+
 
 void vEnvironmentSensorPublishTask( void * pvParameters )
 {
@@ -259,12 +263,10 @@ void vEnvironmentSensorPublishTask( void * pvParameters )
         vTaskDelete( NULL );
     }
 
-    uxTopicLen = KVStore_getString( CS_CORE_THING_NAME, pcTopicString, MQTT_PUBLICH_TOPIC_STR_LEN );
+    //TODO: Set your team number in the topic name. (team_0, team_1, team_2, ...)
+    uxTopicLen = snprintf(pcTopicString, MQTT_PUBLICH_TOPIC_STR_LEN, "/ncsu/team_%d/EnvSensors", 0);
 
-    if( uxTopicLen > 0 )
-    {
-        uxTopicLen = strlcat( pcTopicString, "/" MQTT_PUBLISH_TOPIC, MQTT_PUBLICH_TOPIC_STR_LEN );
-    }
+
 
     if( ( uxTopicLen == 0 ) || ( uxTopicLen >= MQTT_PUBLICH_TOPIC_STR_LEN ) )
     {
@@ -297,10 +299,9 @@ void vEnvironmentSensorPublishTask( void * pvParameters )
             /* Write to */
             bytesWritten = snprintf( payloadBuf,
                                      MQTT_PUBLISH_MAX_LEN,
-                                     "{ \"temp_0_c\": %f, \"rh_pct\": %f, \"temp_1_c\": %f, \"baro_mbar\": %f }",
+                                     "{ \"temperature\": %f, \"humidity\": %f, \"pressure\": %f }",
                                      xEnvData.fTemperature0,
                                      xEnvData.fHumidity,
-                                     xEnvData.fTemperature1,
                                      xEnvData.fBarometricPressure );
 
             if( bytesWritten < MQTT_PUBLISH_MAX_LEN )
