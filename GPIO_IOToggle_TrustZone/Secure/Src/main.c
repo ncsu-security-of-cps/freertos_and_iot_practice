@@ -52,6 +52,8 @@
 static uint32_t SecureTimingDelay = SECURE_IO_TOGGLE_DELAY;  /* Secure delay */
 static uint32_t SecureInitIODone = 0;
 
+char secure_message[128];
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -97,6 +99,8 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
+
+  sprintf(secure_message, "This is a secret, so it should be protected!");
 
   /* USER CODE END Init */
 
@@ -402,6 +406,7 @@ void Error_Handler(void)
   }
   /* USER CODE END Error_Handler_Debug */
 }
+
 
 #ifdef  USE_FULL_ASSERT
 /**
